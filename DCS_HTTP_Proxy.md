@@ -78,7 +78,13 @@ HTTPS nu este tratat. Cererile `CONNECT` primesc raspuns 501 si nu se face nicio
 
 ## *1.4 Structura DCS*
 
-Capitolul 1 spune ce face proiectul si ce termeni si surse sunt folosite in rest. Capitolul 2 descrie produsul: cum circula o cerere prin proxy, pe ce platforma ruleaza, ce valori implicite are si ce limite are. Capitolul 3 contine cerintele propriu-zise, numerotate (CF = functionale, CNF = nefunctionale), astfel incat fiecare sa poata fi verificata separat in faza de testare.
+Documentul este organizat astfel: 
+
+- Capitolul 1 descrie ce face proiectul si definitia termenilor de specialitate 
+
+- Capitolul 2 oferă o perspectivă de ansamblu asupra modului in care circula o cerere proxy, pe ce platforme ruleaza, ce valori implicite are si care sunt limitele 
+
+- Capitolul 3 detaliază punctual cerințele funcționale și pe cele ne-funcționale. Anexele ulterioare vor detalia snippeturi de cod. 
 
 ---
 
@@ -86,15 +92,9 @@ Capitolul 1 spune ce face proiectul si ce termeni si surse sunt folosite in rest
 
 ## *2.1 Descrierea produsului software*
 
-Proxy-ul este un program C++ pentru Linux. Browserul este configurat sa foloseasca adresa si portul proxy-ului (implicit `127.0.0.1:8080`) si de aici incolo toate cererile HTTP trec prin el.
+Proxy-ul este un program C++ pentru Linux. Browserul este configurat sa foloseasca adresa si portul proxy-ului (implicit `127.0.0.1:8080`) astfel incat toate cererile HTTP sa fie interceptate de el.
 
-```
-Fara upstream:
-Browser  <--TCP-->  Proxy  <--TCP-->  Server web
-
-Cu upstream:
-Browser  <--TCP-->  Proxy  <--TCP-->  Upstream proxy  <--TCP-->  Server web
-```
+Produsul este scalabil orizontal si vertical. Scalabilitatea pe orizontala presupune optiunea de a gestiona mai multe requesturi simultan de la mai multe browsere, prin mai multe threaduri de executie. Scalabilitatea pe verticala presupune posibilitatea de a implementa un proxy chain, astfel incat fiecare server proxy sa redirectioneze traficul (upstream_ip && upstream_port) catre un alt proxy configurat sa asculte pe ip-ul si portul de upstream al proxyului anterior.
 
 O cerere este procesata astfel:
 
