@@ -244,8 +244,10 @@ log_file=proxy.log
 
 * **CF8.1** Proxy-ul ofera o interfata grafica dedicata, prin care utilizatorul poate monitoriza si prelucra traficul HTTP in tranzit, functionalitate asemanatoare cu Burp Suite.
 * **CF8.2** Interfata ofera un control de tip buton pentru comutarea interceptarii ```Toggle Intercept ON/OFF```. Cand Intercept este ON, orice cerere venita de la client este retinuta in proxy, iar interfata o expune in modul de editare. Aici utilizatorul poate interveni asupra metodei, uri-ului, header-elor sau body-ului. Requestul pleaca spre server doar dupa confirmarea explicita a utilizatorului (buton de ```Forward```). In caz contrar, requestul poate fi distrus/anulat (buton de ```Drop```).
-* **CF8.3** Interfata detine o vizualizare denumita **View HTTP History**, unde toate tranzactiile traficului sunt logate. Selectand o anumita inregistrare in istoric, interfata va afisa direct request-ul si, alaturat (intr-o vedere side-by-side sau tab-uri paralele), response-ul corespunzator generat de catre server.
-* **CF8.4** Daca Intercept este OFF, request-urile nu mai raman blocate in modul de editare, fiind trimise fluid si nealterat catre server. Cu toate acestea, ele (si raspunsurile aferente) vor continua sa fie centralizate si vizibile in modulul HTTP History.
+* **CF8.3** In modul de editare al requestului, putem edita liber campurile requestului. Cand dam forward, bufferului in care a fost salvat requestul interceptat va fi suprascris cu datele editate, care va fi apoi impachetat in formatul primit(application/json, text/html, etc.). De asemenea, putem avea si reguli de modificare automata, adica o lista de reguli generale: schimbarea protocolului http, schimbarea tipului de content, schimbarea unui cuvant la toate aparitiile sale, etc.
+* **CF8.4** Interfata detine o vizualizare denumita **View HTTP History**, unde toate tranzactiile traficului sunt logate. Selectand o anumita inregistrare in istoric, interfata va afisa direct request-ul si, alaturat (intr-o vedere side-by-side sau tab-uri paralele), response-ul corespunzator generat de catre server.
+* **CF8.5** Daca Intercept este OFF, request-urile nu mai raman blocate in modul de editare, fiind trimise fluid si nealterat catre server. Cu toate acestea, ele (si raspunsurile aferente) vor continua sa fie centralizate si vizibile in modulul HTTP History.
+
 
 ### CF9. Conexiuni persistente
 
