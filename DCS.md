@@ -99,10 +99,10 @@ Produsul este scalabil orizontal si vertical. Scalabilitatea pe orizontala presu
 O cerere este procesata astfel:
 
 1. Thread-ul principal accepta conexiunea si pune fd-ul clientului in coada de lucru.
-2. Un worker liber scoate fd-ul din coada si citeste cererea de pe socket, pana are header-ele complete si, daca exista, tot body-ul.
+2. Un worker liber scoate fd-ul din coada si citeste de pe socket request line-ul si header-ele, pana la `\r\n\r\n`. //R <!-- 2. Un worker liber scoate fd-ul din coada si citeste cererea de pe socket, pana are header-ele complete si, daca exista, tot body-ul. -->
 3. Parseaza request line-ul si header-ele si afla serverul caruia ii este adresata cererea.
-4. Aplica regulile de modificare pentru cereri, daca exista.
-5. Deschide o conexiune TCP catre server (sau catre upstream proxy, daca este activ) si trimite cererea.
+4. Aplica regulile de modificare pentru cereri, daca exista. Daca Intercept este ON, cererea este retinuta pana la Forward sau Drop (CF8.2). //R
+5. Deschide o conexiune TCP catre server (sau catre upstream proxy, daca este activ) si trimite cererea. Body-ul, daca exista, este citit de la client si trimis mai departe dupa regulile de la CF6.4. //R
 6. Citeste raspunsul serverului, aplica eventualele reguli pentru raspunsuri si il trimite clientului.
 7. Scrie in log o linie despre cerere. In cazul in care conexiunea cu un client poate ramane deschisa, workerul asteapta urmatoarea cerere, altfel inchide socketurile si ia o conexiune noua din coada.
 
@@ -160,6 +160,7 @@ log_file=proxy.log
 | Dimensiunea maxima a header-elor (request line inclus)     | `16 KB`           | peste limita se raspunde cu 431                       |
 | Dimensiunea maxima a body-ului unei cereri                 | `50 MB`           | dupa`Content-Length`; peste limita se raspunde cu 413 |
 | Dimensiunea maxima a unui raspuns pe care se aplica reguli | `5 MB`            | peste limita raspunsul se trimite nemodificat         |
+| Dimensiunea maxima a body-ului pastrat in HTTP History     | `5 MB`            | peste limita body-ul se pastreaza trunchiat           | //R
 | Timeout`connect()`                                         | `10 s`            |                                                       |
 | Timeout`recv()` / `send()`                                 | `30 s`            |                                                       |
 | Timeout conexiune inactiva (keep-alive)                    | `15 s`            |                                                       |
@@ -192,13 +193,13 @@ log_file=proxy.log
 ### CF1. Pornire si configurare
 
 * **CF1.1** La pornire proxy-ul citeste fisierul `proxy.conf`. Calea poate fi data ca prim argument, altfel se cauta in directorul curent. Daca fisierul lipseste, porneste cu valorile implicite din 2.3 si afiseaza un avertisment.
-* **CF1.2** Optiunile din linia de comanda (`--port`, `--workers`, `--upstream host:port`) au prioritate fata de fisier.
+* **CF1.2** Optiunile din linia de comanda (`--port`, `--workers`, `--upstream host:port`, `--no-upstream`) au prioritate fata de fisier. //R
 * **CF1.3** Se creeaza socketul server cu `socket()`, se seteaza `SO_REUSEADDR`, apoi `bind()` si `listen()`. Daca bind-ul esueaza (de exemplu portul este ocupat), proxy-ul afiseaza cauza si se inchide cu cod de iesire diferit de 0.
 * **CF1.4** La pornire se afiseaza pe stdout adresa si portul de ascultare, numarul de workeri si starea upstream-ului (activ cu `host:port` sau dezactivat).
 
 ### CF2. Acceptarea conexiunilor si thread pool
 
-* **CF2.1** Thread-ul principal apeleaza `accept()` intr-o bucla si pune fd-ul primit in coada de conexiuni. Nu citeste si nu scrie nimic pe socketul clientului.
+* **CF2.1** Thread-ul principal apeleaza `accept()` intr-o bucla si pune fd-ul primit in coada de conexiuni. Nu citeste nimic de pe socketul clientului, iar singurul lucru pe care il scrie este raspunsul 503 de la CF2.3, cand coada este plina. //R <!-- Nu citeste si nu scrie nimic pe socketul clientului. -->
 * **CF2.2** Coada are cel mult 64 de elemente. Accesul se face sub mutex, iar workerii asteapta pe o condition variable cand coada e goala.
 * **CF2.3** Daca coada este plina, conexiunea nou acceptata primeste imediat raspuns 503 si este inchisa.
 * **CF2.4** Workerii se creeaza o singura data, la pornire. Un worker serveste o conexiune pana la inchiderea ei, apoi revine la coada.
@@ -216,8 +217,9 @@ log_file=proxy.log
 * **CF4.1** Din request line se extrag metoda, targetul si versiunea. Metodele neacceptate (inclusiv `CONNECT`) primesc 501, iar versiunile diferite de HTTP/1.0 si HTTP/1.1 primesc 505.
 * **CF4.2** Targetul se asteapta in forma absoluta (`http://host[:port]/cale`). Daca este in forma origin, host-ul se ia din header-ul `Host`. Portul implicit este 80.
 * **CF4.3** Header-ele se retin ca perechi nume-valoare, in ordinea in care au venit. Cautarea dupa nume nu tine cont de majuscule.
-* **CF4.4** Se raspunde cu 400 cand request line-ul nu are trei parti, cand un header nu contine `:`, cand `Content-Length` nu este un numar valid sau cand apar si `Content-Length`, si `Transfer-Encoding`.
-* **CF4.5** Daca `Content-Length` depaseste 50 MB, se raspunde cu 413.
+* **CF4.4** Se raspunde cu 400 cand request line-ul nu are trei parti, cand un header nu contine `:`, cand `Content-Length` nu este un numar valid sau cand apar si `Content-Length`, si `Transfer-Encoding`. Tot cu 400 se raspunde la celelalte erori de format din RFC 9112: spatiu intre numele header-ului si `:`, linie de header care incepe cu spatiu (obs-fold), cerere HTTP/1.1 fara `Host`, cerere in forma origin fara `Host`, cerere cu mai multe `Host`, mai multe `Content-Length` cu valori diferite, tinta invalida (nici `http://host[:port]/cale`, nici `/cale`, sau cu port invalid) si body chunked malformat. //R
+* **CF4.5** Daca `Content-Length`, sau suma chunk-urilor unui body chunked, depaseste 50 MB, se raspunde cu 413. //R <!-- * **CF4.5** Daca `Content-Length` depaseste 50 MB, se raspunde cu 413. -->
+* **CF4.6** Daca `Transfer-Encoding` are alta valoare decat `chunked`, se raspunde cu 501 (RFC 9112 6.1). //R
 
 ### CF5. Conectarea la server
 
@@ -231,7 +233,7 @@ log_file=proxy.log
 * **CF6.1** Fara upstream, request line-ul se rescrie in forma origin (`GET /cale HTTP/1.1`). Header-ul `Host` se pastreaza, iar daca lipseste se completeaza din tinta.
 * **CF6.2** Header-ele hop-by-hop din cerere se sterg. Spre server se adauga `Connection: close`.
 * **CF6.3** Cererea se trimite cu `send()` intr-o bucla, pana la ultimul octet.
-* **CF6.4** Body-ul cererii se retransmite pe masura ce este citit, in blocuri de 8 KB, fara a fi tinut integral in memorie.
+* **CF6.4** Cand Intercept este OFF (CF8.5), body-ul cererii se retransmite pe masura ce este citit, in blocuri de 8 KB, fara a fi tinut integral in memorie. Cand Intercept este ON (CF8.2), cererea trebuie retinuta pana la Forward sau Drop, deci body-ul se tine integral in memorie, in limita de 50 MB de la CF4.5. //R <!-- * **CF6.4** Body-ul cererii se retransmite pe masura ce este citit, in blocuri de 8 KB, fara a fi tinut integral in memorie. -->
 
 ### CF7. Citirea si trimiterea raspunsului
 
@@ -244,8 +246,8 @@ log_file=proxy.log
 
 * **CF8.1** Proxy-ul ofera o interfata grafica dedicata, prin care utilizatorul poate monitoriza si prelucra traficul HTTP in tranzit, functionalitate asemanatoare cu Burp Suite.
 * **CF8.2** Interfata ofera un control de tip buton pentru comutarea interceptarii ```Toggle Intercept ON/OFF```. Cand Intercept este ON, orice cerere venita de la client este retinuta in proxy, iar interfata o expune in modul de editare. Aici utilizatorul poate interveni asupra metodei, uri-ului, header-elor sau body-ului. Requestul pleaca spre server doar dupa confirmarea explicita a utilizatorului (buton de ```Forward```). In caz contrar, requestul poate fi distrus/anulat (buton de ```Drop```).
-* **CF8.3** In modul de editare al requestului, putem edita liber campurile requestului. Cand dam forward, bufferului in care a fost salvat requestul interceptat va fi suprascris cu datele editate, care va fi apoi impachetat in formatul primit(application/json, text/html, etc.). De asemenea, putem avea si reguli de modificare automata, adica o lista de reguli generale: schimbarea protocolului http, schimbarea tipului de content, schimbarea unui cuvant la toate aparitiile sale, etc.
-* **CF8.4** Interfata detine o vizualizare denumita **View HTTP History**, unde toate tranzactiile traficului sunt logate. Selectand o anumita inregistrare in istoric, interfata va afisa direct request-ul si, alaturat (intr-o vedere side-by-side sau tab-uri paralele), response-ul corespunzator generat de catre server.
+* **CF8.3** In modul de editare al requestului, putem edita liber campurile requestului. Cand dam forward, bufferului in care a fost salvat requestul interceptat va fi suprascris cu datele editate, care va fi apoi impachetat in formatul primit(application/json, text/html, etc.). De asemenea, putem avea si reguli de modificare automata, adica o lista de reguli generale: schimbarea versiunii HTTP (doar intre HTTP/1.0 si HTTP/1.1, vezi 2.3), schimbarea tipului de content, schimbarea unui cuvant la toate aparitiile sale, etc. //R <!-- schimbarea protocolului http -->
+* **CF8.4** Interfata detine o vizualizare denumita **View HTTP History**, unde toate tranzactiile traficului sunt logate. Selectand o anumita inregistrare in istoric, interfata va afisa direct request-ul si, alaturat (intr-o vedere side-by-side sau tab-uri paralele), response-ul corespunzator generat de catre server. Pentru History, proxy-ul pastreaza o copie a cererii si a raspunsului pe masura ce trec prin el: header-ele complete si cel mult primii 5 MB din fiecare body (peste limita body-ul apare trunchiat, vezi 2.3). Transferul catre client nu asteapta aceasta copie, deci CF7.3 ramane valabil. //R
 * **CF8.5** Daca Intercept este OFF, request-urile nu mai raman blocate in modul de editare, fiind trimise fluid si nealterat catre server. Cu toate acestea, ele (si raspunsurile aferente) vor continua sa fie centralizate si vizibile in modulul HTTP History.
 
 
@@ -274,13 +276,16 @@ log_file=proxy.log
 | ----------------------------------------- | --- |
 | Cerere malformata                         | 400 |
 | Cerere incompleta dupa 30 s               | 408 |
-| Body prea mare (`Content-Length` > 50 MB) | 413 |
+| Body prea mare (`Content-Length` sau chunked > 50 MB) | 413 | //R
 | Header-e prea mari                        | 431 |
-| Metoda neacceptata sau`CONNECT`           | 501 |
+| Metoda neacceptata, `CONNECT` sau `Transfer-Encoding` necunoscut | 501 | //R
 | Versiune HTTP neacceptata                 | 505 |
 | Server sau upstream inaccesibil           | 502 |
 | Timeout la server                         | 504 |
 | Coada de conexiuni plina                  | 503 |
+
+<!-- | Body prea mare (`Content-Length` > 50 MB) | 413 | -->
+<!-- | Metoda neacceptata sau`CONNECT`           | 501 | -->
 
 Raspunsurile de eroare au un body scurt cu textul erorii si `Connection: close`.
 
@@ -312,7 +317,7 @@ Raspunsurile de eroare au un body scurt cu textul erorii si `Connection: close`.
 
 * **CNF1.1** O cerere GET fara reguli, catre un server pe aceeasi masina, trebuie sa dureze cu mai putin de 10 ms mai mult prin proxy decat direct (masurat cu `curl -w "%{time_total}"`).
 * **CNF1.2** Proxy-ul trebuie sa serveasca cel putin 8 clienti simultani, cu configuratia implicita, fara ca unul sa-i astepte pe ceilalti.
-* **CNF1.3** In afara regulilor de modificare, memoria folosita pentru o conexiune ramane sub 100 KB (buffere pentru header-e si blocuri de 8 KB), indiferent de dimensiunea transferului.
+* **CNF1.3** In afara regulilor de modificare, a interceptarii (Intercept ON, CF6.4) si a copiei pentru HTTP History (CF8.4), memoria folosita pentru o conexiune ramane sub 100 KB (buffere pentru header-e si blocuri de 8 KB), indiferent de dimensiunea transferului. //R
 
 ### CNF2. Concurenta si scalabilitate
 
