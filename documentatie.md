@@ -1,4 +1,4 @@
-## Surse si unde sunt folosite in cod
+
 
 1. RFC 9112 (HTTP/1.1) – https://www.rfc-editor.org/rfc/rfc9112
    `src/core/HTTPRequest.cpp`: `ParseRequest`, `ParseRequestLine`, `ParseTarget`, `ParseBodyLength`; `src/forward/SocketIO.cpp`: `ReadHeaders`, `StreamBody`, `StreamChunkedBody`.
